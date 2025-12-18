@@ -1,0 +1,7 @@
+    d       a       alpha       theta
+    0.147   0       0           theta1
+    0       0       pi/2        pi/2+theta2
+    0.025   0.427   0           theta3
+    0.116   0.357   0           pi/2+theta4
+    0.116   0       pi/2        theta5
+    0.105   0       -pi/2       theta6
