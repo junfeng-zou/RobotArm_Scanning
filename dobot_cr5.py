@@ -74,11 +74,12 @@ class DobotCR5:
             self.feedback_client.connect((self.ip_address, self.feedback_port))
             
             # 启动反馈线程
+            self.is_connected = True
             self.feedback_running = True
             self.feedback_thread = threading.Thread(target=self._feedback_loop, daemon=True)
             self.feedback_thread.start()
             
-            self.is_connected = True
+            
             print("Successfully connected to the robot.")
             
         except Exception as e:
@@ -133,6 +134,21 @@ class DobotCR5:
         """设置速度比例 (1-100)"""
         cmd = f"SpeedFactor({ratio})"
         return self._send_dashboard_command(cmd)
+    
+    def get_robot_mode(self) -> str:
+        """通过 Dashboard 查询机器人模式"""
+        response = self._send_dashboard_command("RobotMode()")
+        return response
+    
+    def get_pose(self) -> str:
+        """通过 Dashboard 查询当前位姿"""
+        response = self._send_dashboard_command("GetPose()")
+        return response
+    
+    def get_angle(self) -> str:
+        """通过 Dashboard 查询当前关节角度"""
+        response = self._send_dashboard_command("GetAngle()")
+        return response
     
     def joint_mov_j(self, joints: List[float]):
         """关节运动（角度单位：度）"""
@@ -200,19 +216,28 @@ class DobotCR5:
     
     def _feedback_loop(self):
         """实时反馈数据接收线程"""
+        buffer = bytearray()  # 数据缓冲区
         while self.feedback_running and self.is_connected:
             try:
                 if not self.feedback_client:
                     break
                 
                 self.feedback_client.settimeout(1.0)
-                data = self.feedback_client.recv(1440)
+                data = self.feedback_client.recv(4096)  # 增大接收缓冲区
                 
-                if len(data) >= 1440:
-                    self.state_data = bytearray(data)
-                    self._parse_feedback_data()
+                if data:
+                    buffer.extend(data)
+                    
+                    # 当缓冲区有足够数据时解析
+                    while len(buffer) >= 1440:
+                        self.state_data = bytearray(buffer[:1440])
+                        buffer = buffer[1440:]  # 移除已处理的数据
+                        self._parse_feedback_data()
+                else:
+                    print("[DEBUG] Received empty data")
                     
             except socket.timeout:
+                print("[DEBUG] Feedback socket timeout")
                 continue
             except Exception as e:
                 if self.feedback_running:
@@ -241,7 +266,12 @@ class DobotCR5:
             
             # 笛卡尔位姿 (字节位置 624 开始)
             for i in range(6):
-                self.cartesian_pose[i] = self._bytes_to_double(624 + i * 8)
+                value = self._bytes_to_double(624 + i * 8)
+                # 前3个是位置 (X, Y, Z)，从 mm 转换为 m
+                if i < 3:
+                    self.cartesian_pose[i] = value / 1000.0
+                else:
+                    self.cartesian_pose[i] = value
             
             # 关节速度 (字节位置 480 开始)
             for i in range(6):
@@ -266,15 +296,19 @@ class DobotCR5:
 
 if __name__ == "__main__":
     # 测试代码
-    robot = DobotCR5()
+    robot = DobotCR5(ip_address='192.168.50.104')  # 使用您的机器人 IP
     try:
         robot.connect()
-        time.sleep(1)
+        time.sleep(3)
         
-        print(f"Robot mode: {robot.robot_mode}")
-        print(f"Joint angles: {robot.joint_angles}")
-        print(f"Cartesian pose: {robot.cartesian_pose}")
+        print("\n--- Feedback Port Data ---")
+        print(f"Robot mode (from feedback): {robot.robot_mode}")
+        print(f"Joint angles (from feedback): {[round(a, 4) for a in robot.joint_angles]}")
+        print(f"Cartesian pose (from feedback): {[round(p, 4) for p in robot.cartesian_pose]}")
+        print("=" * 50)
         
         robot.disconnect()
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
