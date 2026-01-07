@@ -9,13 +9,7 @@ import time
 import sys
 from dobot_cr5 import DobotCR5
 
-try:
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d import Axes3D
-    HAS_MATPLOTLIB = True
-except ImportError:
-    HAS_MATPLOTLIB = False
-    print("Warning: matplotlib not available, visualization disabled")
+
 
 
 def execute_scanning_trajectory(trajectory_file: str, speed_ratio: int = 30):
@@ -82,7 +76,22 @@ def execute_scanning_trajectory(trajectory_file: str, speed_ratio: int = 30):
     
     # 使能机器人 (负载设为0.05kg)
     robot.enable(0.05)
-    time.sleep(1.0)
+    
+    # 等待机器人状态变为ENABLE
+    print("等待机器人使能...")
+    max_enable_wait = 10.0  # 最大等待时间（秒）
+    enable_start_time = time.time()
+    
+    while robot.robot_mode != 'ENABLE':
+        if time.time() - enable_start_time > max_enable_wait:
+            print(f"警告: 等待使能超时，当前状态: {robot.robot_mode}")
+            break
+        time.sleep(0.1)
+    
+    if robot.robot_mode == 'ENABLE':
+        print(f"机器人已使能 (用时: {time.time() - enable_start_time:.2f}秒)")
+    else:
+        print(f"机器人状态: {robot.robot_mode}")
     
     # 设置速度比例
     robot.set_speed_ratio(speed_ratio)
@@ -115,45 +124,56 @@ def execute_scanning_trajectory(trajectory_file: str, speed_ratio: int = 30):
     # 记录起始时间
     start_time = time.time()
     
-    # 创建实时图表
-    if HAS_MATPLOTLIB and workspace_trajectory is not None:
-        plt.ion()
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        
-        # 绘制计划轨迹
-        ax.plot(workspace_trajectory[:, 0], workspace_trajectory[:, 1], 
-                workspace_trajectory[:, 2], 'b--', linewidth=1.5, label='计划轨迹')
-        
-        # 实时位置点
-        current_point, = ax.plot([], [], [], 'ro', markersize=12, label='当前位置')
-        
-        # 已执行轨迹
-        executed_line, = ax.plot([], [], [], 'g-', linewidth=2, label='已执行轨迹')
-        
-        ax.set_xlabel('X (mm)')
-        ax.set_ylabel('Y (mm)')
-        ax.set_zlabel('Z (mm)')
-        ax.set_title('扫描轨迹执行进度 (ServoJ模式)')
-        ax.legend()
-        ax.grid(True)
-        
-        # 设置坐标轴范围
-        ax.set_xlim([workspace_trajectory[:, 0].min() - 50, workspace_trajectory[:, 0].max() + 50])
-        ax.set_ylim([workspace_trajectory[:, 1].min() - 50, workspace_trajectory[:, 1].max() + 50])
-        ax.set_zlim([workspace_trajectory[:, 2].min() - 50, workspace_trajectory[:, 2].max() + 50])
-        
-        plt.draw()
-        plt.pause(0.001)
-        
-        executed_positions = []
+
     
     # 先移动到起始位置
     print("移动到起始位置...")
     start_joints_deg = np.rad2deg(joint_trajectory[0, :]).tolist()
     robot.joint_mov_j(start_joints_deg)
-    time.sleep(3.0)
-    print("到达起始位置，开始ServoJ控制\n")
+    
+    # 等待机械臂到达起始位置
+    position_threshold = 1.0  # 关节角度误差阈值（度）
+    check_interval = 0.5  # 检查间隔（秒）
+    max_wait_time = 60.0  # 最大等待时间（秒）
+    wait_start_time = time.time()
+    
+    print("等待机械臂到达起始位置...")
+    while True:
+        # 获取当前关节角度
+        current_joints = robot.joint_angles
+        
+        # 计算与目标位置的误差
+        joint_errors = [abs(current_joints[i] - start_joints_deg[i]) for i in range(6)]
+        max_error = max(joint_errors)
+        
+        # 显示当前状态
+        print(f"  当前最大关节误差: {max_error:.2f}° (阈值: {position_threshold}°)")
+        
+        # 检查是否到达目标位置
+        if max_error < position_threshold:
+            print("已到达起始位置！")
+            break
+        
+        # 检查是否超时
+        elapsed_wait = time.time() - wait_start_time
+        if elapsed_wait > max_wait_time:
+            print(f"警告: 等待超时 ({max_wait_time}秒)，当前误差: {max_error:.2f}°")
+            response = input("是否继续执行? (y/n): ")
+            if response.lower() != 'y':
+                robot.disconnect()
+                print("用户取消执行")
+                return
+            break
+        
+        # 检查机器人状态
+        if robot.robot_mode == 'ERROR':
+            print("错误: 机器人出现错误！")
+            robot.disconnect()
+            return
+        
+        time.sleep(check_interval)
+    
+    print("开始ServoJ控制\n")
     
     # 使用ServoJ逐点执行轨迹
     try:
@@ -175,20 +195,6 @@ def execute_scanning_trajectory(trajectory_file: str, speed_ratio: int = 30):
                 
                 print(f"点 {i+1}/{num_points} ({(i+1)/num_points*100:.1f}%) - "
                       f"关节: [{', '.join([f'{x:.1f}' for x in current_joint_angles])}] deg")
-                
-                # 更新实时图表
-                if HAS_MATPLOTLIB and workspace_trajectory is not None:
-                    executed_positions.append(current_pose[:3])
-                    exec_array = np.array(executed_positions)
-                    
-                    current_point.set_data([current_pose[0]], [current_pose[1]])
-                    current_point.set_3d_properties([current_pose[2]])
-                    
-                    executed_line.set_data(exec_array[:, 0], exec_array[:, 1])
-                    executed_line.set_3d_properties(exec_array[:, 2])
-                    
-                    plt.draw()
-                    plt.pause(0.001)
             
             # 检查机器人状态
             if robot.robot_mode == 'ERROR':
@@ -236,10 +242,7 @@ def execute_scanning_trajectory(trajectory_file: str, speed_ratio: int = 30):
     
     print("\n====== 扫描任务完成！ ======")
     
-    # 保持图表显示
-    if HAS_MATPLOTLIB and workspace_trajectory is not None:
-        plt.ioff()
-        plt.show()
+
 
 
 if __name__ == "__main__":
