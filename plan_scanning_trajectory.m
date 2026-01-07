@@ -8,18 +8,18 @@ clear; clc; close all;
 %% ====== 用户可配置参数 ======
 
 % 目标物体位置 (mm)
-target_position = [-470, -143, 50];  % [X, Y, Z]
+target_position = [-350, -120, 0];  % [X, Y, Z]
 
 % 圆周扫描参数（固定高度俯拍）
-scan_radius = 200;          % 扫描半径 (mm) - 相机距离物体的水平距离
-scan_height = 300;          % 扫描高度 (mm) - 相机在物体上方的高度
-camera_tilt = 15;           % 相机俯视角度 (度) - 0度为完全竖直向下，建议5-30度
+scan_radius = 320;          % 扫描半径 (mm) - 相机距离物体的水平距离
+scan_height = 280;          % 扫描高度 (mm) - 相机在物体上方的高度
+% camera_tilt = 60;           % 相机俯视角度 (度) - 0度为完全竖直向下，建议5-30度
 num_rotations = 1;          % 扫描圈数
 num_points = 150;           % 轨迹点总数
 
 % 扫描速度和时间参数
-scan_velocity = 60;         % 扫描速度 (mm/s) - 控制相机沿轨迹移动的速度
-servo_t = 0.01;             % 轨迹点时间间隔 (s) - 与ServoJ的servo_t参数一致
+scan_velocity = 40;         % 扫描速度 (mm/s) - 控制相机沿轨迹移动的速度
+servo_t = 0.1;             % 轨迹点时间间隔 (s) - 与ServoJ的servo_t参数一致
 
 % 注意：轨迹点数量(num_points)将根据轨迹长度、速度和时间间隔自动计算
 
@@ -32,11 +32,11 @@ fprintf('机器人模型创建成功: %s\n', robot.name);
 fprintf('自由度: %d\n\n', robot.n);
 
 % 初始关节角度猜测 (方便IK求解)
-q_init = [0, 0, -pi/2, 0, pi/2, 0];  % 单位: 弧度
+q_init = [0, 0, pi/2, 0, -pi/2, 0];  % 单位: 弧度
 
 % 保存文件名
 timestamp = datestr(now, 'yyyymmdd_HHMMSS');
-save_filename = sprintf('scanning_trajectory_%s.mat', timestamp);
+save_filename = sprintf('cr5_trajectory_%s.mat', timestamp);
 
 %% ====== 计算轨迹长度和点数 ======
 
@@ -45,7 +45,7 @@ fprintf('====== 计算轨迹参数 ======\n');
 % 先用较少的点估算轨迹长度
 num_points_estimate = 100;
 t_estimate = linspace(0, 1, num_points_estimate);
-theta_estimate = 2 * pi * num_rotations * t_estimate;
+theta_estimate = pi/2 + pi * num_rotations * t_estimate;  % 角度从3π/2到3π/2+π*num_rotations (即5π/2当num_rotations=1)
 
 % 计算估算轨迹的位置
 x_estimate = target_position(1) + scan_radius * cos(theta_estimate);
@@ -78,7 +78,7 @@ fprintf('====== 开始生成扫描轨迹 ======\n');
 fprintf('目标位置: [%.1f, %.1f, %.1f] mm\n', target_position);
 fprintf('扫描半径: %.1f mm\n', scan_radius);
 fprintf('扫描高度: %.1f mm (相对目标物体)\n', scan_height);
-fprintf('相机俯视角: %.1f 度\n', camera_tilt);
+% fprintf('相机俯视角: %.1f 度\n', camera_tilt);
 fprintf('扫描圈数: %d\n', num_rotations);
 fprintf('轨迹点数: %d\n', num_points);
 fprintf('扫描速度: %.1f mm/s\n', scan_velocity);
@@ -86,7 +86,7 @@ fprintf('点间时间间隔: %.3f 秒\n\n', servo_t);
 
 % 生成参数化轨迹
 t = linspace(0, 1, num_points);  % 参数 t ∈ [0, 1]
-theta = 2 * pi * num_rotations * t;  % 角度从0到2π*num_rotations
+theta = pi/2 + pi * num_rotations * t;  % 角度从3π/2到3π/2+π*num_rotations (即5π/2当num_rotations=1)
 
 % 固定半径和高度（不随时间变化）
 radius = scan_radius * ones(1, num_points);  % 恒定半径
@@ -361,7 +361,7 @@ fprintf('====== 保存轨迹数据 ======\n');
 
 % 保存到MAT文件
 save(save_filename, 'workspace_trajectory', 'joint_trajectory', ...
-    'target_position', 'scan_radius', 'scan_height', 'camera_tilt', ...
+    'target_position', 'scan_radius', 'scan_height', ...
     'num_rotations', 'num_points', ...
     'scan_velocity', 'servo_t', 'velocities', 'joint_velocities', 'timestamps', ...
     'total_scan_time');
