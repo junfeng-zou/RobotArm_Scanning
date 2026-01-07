@@ -19,6 +19,7 @@ function robot = create_dobot_cr5_model()
 
 % 定义DH参数 (Modified DH约定)
 % 参数: theta, d, a, alpha
+% CR5 modifiedDH参数
 L(1) = Link('d', 0.147, 'a', 0, 'alpha', 0, 'offset', 0,'modified');
 L(2) = Link('d', 0, 'a', 0, 'alpha', pi/2, 'offset', pi/2,'modified');
 L(3) = Link('d', 0.025, 'a', 0.427, 'alpha', 0, 'offset', 0,'modified');
@@ -26,12 +27,20 @@ L(4) = Link('d', 0.116, 'a', 0.357, 'alpha', 0, 'offset', pi/2,'modified');
 L(5) = Link('d', 0.116, 'a', 0, 'alpha', pi/2, 'offset', 0,'modified');
 L(6) = Link('d', 0.105, 'a', 0, 'alpha', -pi/2, 'offset', 0,'modified');
 
+% Nova5 modifiedDH参数
+% L(1) = Link('d', 0.240, 'a', 0, 'alpha', pi/2, 'offset', 0);
+% L(2) = Link('d', 0.135, 'a', 0.400, 'alpha', 0, 'offset', pi/2);
+% L(3) = Link('d', 0.0, 'a', 0.330, 'alpha', 0, 'offset', 0);
+% L(4) = Link('d', 0.0, 'a', 0.0, 'alpha', pi/2, 'offset', pi/2);
+% L(5) = Link('d', 0.120, 'a', 0, 'alpha', -pi/2, 'offset', 0);
+% L(6) = Link('d', 0.088, 'a', 0, 'alpha', 0, 'offset', 0);
+
 % 设置关节限位 (单位: 弧度)
-L(1).qlim = deg2rad([-180, 180]);
-L(2).qlim = deg2rad([-180, 180]);
-L(3).qlim = deg2rad([-180, 180]);
-L(4).qlim = deg2rad([-180, 180]);
-L(5).qlim = deg2rad([-180, 180]);
+L(1).qlim = deg2rad([-360, 360]);
+L(2).qlim = deg2rad([-360, 360]);
+L(3).qlim = deg2rad([-160, 160]);
+L(4).qlim = deg2rad([-360, 360]);
+L(5).qlim = deg2rad([-360, 360]);
 L(6).qlim = deg2rad([-360, 360]);
 
 % 创建SerialLink机器人对象
